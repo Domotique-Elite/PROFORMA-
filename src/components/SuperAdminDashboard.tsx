@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useProforma } from '../context/ProformaContext';
 import { EnterpriseAccount } from '../types/auth';
 import { PasswordManagementModal } from './PasswordManagementModal';
+import { SuperAdminSettingsModal } from './SuperAdminSettingsModal';
 import { 
   ShieldCheck, 
   Building2, 
@@ -25,7 +26,9 @@ import {
   MapPin,
   X,
   Receipt,
-  DollarSign
+  DollarSign,
+  UserCheck,
+  Sparkles
 } from 'lucide-react';
 
 export const SuperAdminDashboard: React.FC<{
@@ -33,6 +36,8 @@ export const SuperAdminDashboard: React.FC<{
 }> = ({ onOpenCompanyApp }) => {
   const {
     enterprises,
+    superAdminConfig,
+    clearAllDemoEnterprises,
     createEnterprise,
     toggleAccountStatus,
     resetTemporaryPassword,
@@ -47,6 +52,8 @@ export const SuperAdminDashboard: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'active' | 'blocked'>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isSuperAdminSettingsOpen, setIsSuperAdminSettingsOpen] = useState(false);
+  const [isPurgeConfirmOpen, setIsPurgeConfirmOpen] = useState(false);
   const [passwordModalEnterprise, setPasswordModalEnterprise] = useState<EnterpriseAccount | null>(null);
   
   // Selected account for password view / modal
@@ -117,28 +124,44 @@ export const SuperAdminDashboard: React.FC<{
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const [enterpriseToDelete, setEnterpriseToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
+  const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
+
   const handleToggleBlock = (account: EnterpriseAccount) => {
     const isBlocking = account.status === 'active';
-    const message = isBlocking 
-      ? `Êtes-vous sûr de vouloir BLOQUER le compte de l'entreprise "${account.companyName}" ? L'entreprise ne pourra plus accéder à son interface.`
-      : `Voulez-vous DÉBLOQUER le compte "${account.companyName}" ? L'accès sera immédiatement rétabli.`;
-
-    if (window.confirm(message)) {
-      toggleAccountStatus(account.id, isBlocking ? 'Suspendu par le Super Administrateur' : undefined);
-    }
+    toggleAccountStatus(account.id, isBlocking ? 'Suspendu par le Super Administrateur' : undefined);
+    setStatusFeedback(isBlocking ? `Le compte "${account.companyName}" a été suspendu.` : `Le compte "${account.companyName}" a été réactivé.`);
+    setTimeout(() => setStatusFeedback(null), 3000);
   };
 
   const handleResetPassword = (id: string, name: string) => {
-    if (window.confirm(`Générer un nouveau mot de passe temporaire pour ${name} ?`)) {
-      const newPwd = resetTemporaryPassword(id);
-      alert(`Nouveau mot de passe temporaire pour ${name} :\n\n${newPwd}\n\nTransmettez ce mot de passe à l'entreprise.`);
-    }
+    const newPwd = resetTemporaryPassword(id);
+    setStatusFeedback(`Nouveau mot de passe généré pour ${name} : ${newPwd}`);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`ATTENTION : Voulez-vous supprimer définitivement le compte entreprise "${name}" ?`)) {
-      deleteEnterprise(id);
-    }
+    setEnterpriseToDelete({ id, name });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!enterpriseToDelete) return;
+    setIsDeleting(true);
+    await deleteEnterprise(enterpriseToDelete.id);
+    setIsDeleting(false);
+    setStatusFeedback(`Entreprise "${enterpriseToDelete.name}" supprimée avec succès.`);
+    setEnterpriseToDelete(null);
+    setTimeout(() => setStatusFeedback(null), 3000);
+  };
+
+  const handleConfirmPurge = async () => {
+    setIsPurging(true);
+    await clearAllDemoEnterprises();
+    setIsPurging(false);
+    setIsPurgeConfirmOpen(false);
+    setStatusFeedback('Toutes les entreprises de démonstration ont été purgées avec succès de Supabase.');
+    setTimeout(() => setStatusFeedback(null), 3500);
   };
 
   // Metrics
@@ -196,14 +219,67 @@ export const SuperAdminDashboard: React.FC<{
           </p>
         </div>
 
-        <button
-          onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95 shrink-0 self-start md:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Créer une Entreprise</span>
-        </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 self-start md:self-auto">
+          {/* Mon Compte Super Admin */}
+          <button
+            onClick={() => setIsSuperAdminSettingsOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-all active:scale-95 shadow-xs"
+            title="Modifier l'email et le mot de passe de connexion Super Admin"
+          >
+            <ShieldCheck className="w-4 h-4 text-indigo-400" />
+            <span>Mon Compte Admin</span>
+          </button>
+
+          {/* Purger les comptes de test (si entreprises existantes) */}
+          {enterprises.length > 0 && (
+            <button
+              onClick={() => setIsPurgeConfirmOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-all active:scale-95 shadow-xs"
+              title="Supprimer les entreprises de démonstration pour vider la liste"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+              <span>Purger démo ({enterprises.length})</span>
+            </button>
+          )}
+
+          {/* Créer une entreprise */}
+          <button
+            onClick={handleOpenCreateModal}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>+ Nouvelle Entreprise</span>
+          </button>
+        </div>
       </div>
+
+      {/* Personalized Super Admin Account Prompt (if using default credentials) */}
+      {superAdminConfig.email === 'admin@proformapulse.com' && (
+        <div className="bg-gradient-to-r from-indigo-900/90 via-slate-900 to-indigo-950 border border-indigo-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-white shadow-md">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-400 flex items-center justify-center shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-sm font-bold flex items-center gap-1.5">
+                <span>Personnalisez votre compte Super Administrateur</span>
+                <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                  Important
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Vous êtes connecté avec l'email générique <strong>({superAdminConfig.email})</strong>. Cliquez ici pour enregistrer votre propre email personnel et votre mot de passe confidentiel.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsSuperAdminSettingsOpen(true)}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-md active:scale-95 whitespace-nowrap"
+          >
+            Configurer mon compte personnel
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards: Online, Total, Active, Blocked + Global Financials */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -360,12 +436,38 @@ export const SuperAdminDashboard: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredEnterprises.length === 0 ? (
+              {enterprises.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mx-auto shadow-xs">
+                        <Building2 className="w-7 h-7" />
+                      </div>
+                      <h4 className="text-base font-bold text-slate-800">
+                        Votre plateforme est prête & propre !
+                      </h4>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Toutes les entreprises de test ont été supprimées. Vous pouvez maintenant ajouter votre première vraie entreprise cliente pour lui donner accès à son espace.
+                      </p>
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={handleOpenCreateModal}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                          <span>+ Créer la Première Entreprise</span>
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredEnterprises.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
                     <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                    <p className="font-semibold text-slate-700">Aucune entreprise trouvée</p>
-                    <p className="text-[11px]">Modifiez votre recherche ou créez un nouveau compte.</p>
+                    <p className="font-semibold text-slate-700">Aucune entreprise ne correspond à ce filtre</p>
+                    <p className="text-[11px]">Modifiez votre recherche ou réinitialisez les filtres.</p>
                   </td>
                 </tr>
               ) : (
@@ -807,6 +909,7 @@ export const SuperAdminDashboard: React.FC<{
       )}
 
       {/* ========================================================= */}
+      {/* ========================================================= */}
       {/* MODAL AVANCÉ : GESTION DU MOT DE PASSE TEMPORAIRE CLIENT   */}
       {/* ========================================================= */}
       <PasswordManagementModal
@@ -825,6 +928,130 @@ export const SuperAdminDashboard: React.FC<{
         }}
         generateRandomPassword={generateRandomPassword}
       />
+
+      {/* ========================================================= */}
+      {/* MODAL : PARAMÈTRES DU COMPTE SUPER ADMIN                  */}
+      {/* ========================================================= */}
+      <SuperAdminSettingsModal
+        isOpen={isSuperAdminSettingsOpen}
+        onClose={() => setIsSuperAdminSettingsOpen(false)}
+      />
+
+      {/* ========================================================= */}
+      {/* MODAL : CONFIRMATION DE PURGE DES COMPTES DE TEST         */}
+      {/* ========================================================= */}
+      {isPurgeConfirmOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-bold text-slate-900">
+                Supprimer les entreprises de test ?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Cette action supprimera définitivement les {enterprises.length} compte(s) d'entreprises de démonstration pour vous laisser un espace 100% vierge et prêt pour vos vrais clients.
+              </p>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px] leading-relaxed">
+              <strong>Note :</strong> Votre compte Super Admin ainsi que vos paramètres restent inchangés. Vous pourrez créer de nouvelles entreprises immédiatement après.
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isPurging}
+                onClick={() => setIsPurgeConfirmOpen(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={isPurging}
+                onClick={handleConfirmPurge}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-60 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                {isPurging ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Suppression en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Oui, purger les comptes test</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL : CONFIRMATION DE SUPPRESSION D'UNE ENTREPRISE      */}
+      {/* ========================================================= */}
+      {enterpriseToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-lg font-bold text-slate-900">
+                Supprimer "{enterpriseToDelete.name}" ?
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Cette action supprimera définitivement le compte de cette entreprise ainsi que l'ensemble de ses devis et historiques de règlements enregistrés dans Supabase.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setEnterpriseToDelete(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-60 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Suppression...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Supprimer définitivement</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* NOTIFICATION FLOTTANTE DE STATUT / TOAST                   */}
+      {/* ========================================================= */}
+      {statusFeedback && (
+        <div className="fixed bottom-6 right-6 z-50 animate-bounce bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-slate-700 text-xs font-bold flex items-center gap-2.5">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{statusFeedback}</span>
+        </div>
+      )}
 
     </div>
   );

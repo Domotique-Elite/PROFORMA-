@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, enterprises, isSupabaseConnected } = useAuth();
+  const { login, enterprises, superAdminConfig, isSupabaseConnected } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'enterprise' | 'superadmin'>('enterprise');
   const [email, setEmail] = useState('');
@@ -61,8 +61,8 @@ export const LoginPage: React.FC = () => {
 
   const handleSelectSuperAdmin = () => {
     setActiveTab('superadmin');
-    setEmail(SUPER_ADMIN_CREDENTIALS.email);
-    setPassword(SUPER_ADMIN_CREDENTIALS.password);
+    setEmail(superAdminConfig.email);
+    setPassword(superAdminConfig.password);
     setErrorMessage('');
   };
 
@@ -240,7 +240,7 @@ export const LoginPage: React.FC = () => {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={activeTab === 'enterprise' ? 'ex: contact@domoelite.com' : 'admin@proformapulse.com'}
+                    placeholder={activeTab === 'enterprise' ? 'ex: contact@monentreprise.com' : superAdminConfig.email}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all font-medium"
                   />
                 </div>
@@ -317,39 +317,47 @@ export const LoginPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
                     <div>
-                      <div className="font-bold">Super Administrateur</div>
-                      <div className="text-[10px] text-slate-500 font-mono">admin@proformapulse.com</div>
+                      <div className="font-bold">{superAdminConfig.name}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">{superAdminConfig.email}</div>
                     </div>
                   </div>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
-                    admin2026
+                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold font-mono">
+                    {superAdminConfig.password}
                   </span>
                 </button>
 
-                {/* Enterprises Quick Buttons */}
-                {enterprises.slice(0, 2).map((ent) => (
-                  <button
-                    key={ent.id}
-                    type="button"
-                    onClick={() => handleSelectQuickAccount(ent.email, ent.tempPassword)}
-                    className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between text-xs ${
-                      activeTab === 'enterprise' && email === ent.email
-                        ? 'bg-indigo-50/80 border-indigo-300 text-indigo-900 font-semibold'
-                        : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div className="truncate">
-                        <div className="font-bold truncate">{ent.companyName}</div>
-                        <div className="text-[10px] text-slate-500 font-mono truncate">{ent.email}</div>
+                {/* Enterprises Quick Buttons or Empty Message */}
+                {enterprises.length === 0 ? (
+                  <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center">
+                    <p className="text-[11px] text-slate-500">
+                      Aucune entreprise configurée. Connectez-vous en Super Admin pour créer vos premières entreprises.
+                    </p>
+                  </div>
+                ) : (
+                  enterprises.slice(0, 2).map((ent) => (
+                    <button
+                      key={ent.id}
+                      type="button"
+                      onClick={() => handleSelectQuickAccount(ent.email, ent.tempPassword)}
+                      className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between text-xs ${
+                        activeTab === 'enterprise' && email === ent.email
+                          ? 'bg-indigo-50/80 border-indigo-300 text-indigo-900 font-semibold'
+                          : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div className="truncate">
+                          <div className="font-bold truncate">{ent.companyName}</div>
+                          <div className="text-[10px] text-slate-500 font-mono truncate">{ent.email}</div>
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono shrink-0 ml-2">
-                      {ent.tempPassword}
-                    </span>
-                  </button>
-                ))}
+                      <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono shrink-0 ml-2">
+                        {ent.tempPassword}
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 

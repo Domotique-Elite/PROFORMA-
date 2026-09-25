@@ -39,25 +39,75 @@ export const SupabaseService = {
       return null;
     }
 
-    return (data || []).map((row) => ({
-      id: row.id,
-      companyName: row.company_name,
-      email: row.email,
-      tempPassword: row.temp_password,
-      phone: row.phone || '',
-      address: row.address || '',
-      city: row.city || '',
-      contactPerson: row.contact_person || '',
-      currency: row.currency || 'USD',
-      defaultTemplate: row.default_template || 'wave',
-      status: row.status as 'active' | 'blocked',
-      lastHeartbeat: Number(row.last_heartbeat) || Date.now(),
-      lastLoginAt: row.last_login_at || undefined,
-      createdAt: row.created_at || new Date().toISOString(),
-      passwordUpdatedAt: row.password_updated_at || undefined,
-      blockReason: row.block_reason || undefined,
-      notes: row.notes || undefined,
-    }));
+    return (data || [])
+      .filter((row) => row.id !== 'super-admin-master')
+      .map((row) => ({
+        id: row.id,
+        companyName: row.company_name,
+        email: row.email,
+        tempPassword: row.temp_password,
+        phone: row.phone || '',
+        address: row.address || '',
+        city: row.city || '',
+        contactPerson: row.contact_person || '',
+        currency: row.currency || 'USD',
+        defaultTemplate: row.default_template || 'wave',
+        status: row.status as 'active' | 'blocked',
+        lastHeartbeat: Number(row.last_heartbeat) || Date.now(),
+        lastLoginAt: row.last_login_at || undefined,
+        createdAt: row.created_at || new Date().toISOString(),
+        passwordUpdatedAt: row.password_updated_at || undefined,
+        blockReason: row.block_reason || undefined,
+        notes: row.notes || undefined,
+      }));
+  },
+
+  // Récupérer la configuration Super Admin stockée dans Supabase
+  async fetchSuperAdmin(): Promise<{ name: string; email: string; password: string } | null> {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('enterprises')
+        .select('*')
+        .eq('id', 'super-admin-master')
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return {
+        name: data.company_name,
+        email: data.email,
+        password: data.temp_password,
+      };
+    } catch (e) {
+      console.warn('Erreur Supabase fetchSuperAdmin:', e);
+      return null;
+    }
+  },
+
+  // Enregistrer ou modifier le compte Super Admin dans Supabase
+  async upsertSuperAdmin(config: { name: string; email: string; password: string }): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const payload = {
+        id: 'super-admin-master',
+        company_name: config.name,
+        email: config.email,
+        temp_password: config.password,
+        status: 'active',
+        contact_person: 'Super Admin',
+        currency: 'USD',
+        notes: 'Compte Super Administrateur Principal',
+      };
+      const { error } = await supabase.from('enterprises').upsert(payload);
+      if (error) {
+        console.warn('Erreur Supabase upsertSuperAdmin:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn('Exception upsertSuperAdmin:', e);
+      return false;
+    }
   },
 
   // Créer ou mettre à jour une entreprise
@@ -90,11 +140,63 @@ export const SupabaseService = {
     return true;
   },
 
-  // Supprimer une entreprise
+  // Supprimer une entreprise en cascade sécurisée (évite les blocages par clé étrangère)
   async deleteEnterprise(id: string): Promise<boolean> {
     if (!supabase) return false;
-    const { error } = await supabase.from('enterprises').delete().eq('id', id);
-    return !error;
+    try {
+      // 1. Trouver les proformas associées
+      const { data: pfs } = await supabase
+        .from('proformas')
+        .select('id')
+        .eq('enterprise_id', id);
+
+      const pfIds = (pfs || []).map((p) => p.id);
+
+      // 2. Supprimer les paiements associés
+      await supabase.from('payment_records').delete().eq('enterprise_id', id);
+
+      // 3. Supprimer les items des proformas si existants
+      if (pfIds.length > 0) {
+        await supabase.from('proforma_items').delete().in('proforma_id', pfIds);
+      }
+
+      // 4. Supprimer les proformas de l'entreprise
+      await supabase.from('proformas').delete().eq('enterprise_id', id);
+
+      // 5. Supprimer l'entreprise
+      const { error } = await supabase.from('enterprises').delete().eq('id', id);
+      if (error) {
+        console.error('Erreur Supabase deleteEnterprise:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exception deleteEnterprise:', e);
+      return false;
+    }
+  },
+
+  // Purger toutes les entreprises de test de Supabase
+  async clearAllEnterprises(): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      // Supprimer tous les paiements
+      await supabase.from('payment_records').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      // Supprimer tous les items
+      await supabase.from('proforma_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      // Supprimer tous les devis
+      await supabase.from('proformas').delete().neq('id', '___none___');
+      // Supprimer toutes les entreprises sauf le compte super-admin-master
+      const { error } = await supabase.from('enterprises').delete().neq('id', 'super-admin-master');
+      if (error) {
+        console.error('Erreur Supabase clearAllEnterprises:', error.message);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('Exception clearAllEnterprises:', e);
+      return false;
+    }
   },
 
   // Mettre à jour le heartbeat pour statut en ligne

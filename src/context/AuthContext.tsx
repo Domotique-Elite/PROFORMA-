@@ -9,6 +9,11 @@ interface AuthContextType {
   activeEnterprise: EnterpriseAccount | null;
   isSupabaseConnected: boolean;
   
+  // Super Admin Credentials & Config
+  superAdminConfig: SuperAdminConfig;
+  updateSuperAdminConfig: (data: { email?: string; password?: string; name?: string }) => Promise<{ success: boolean; error?: string }>;
+  clearAllDemoEnterprises: () => Promise<void>;
+
   // Auth methods
   login: (email: string, password: string) => { success: boolean; error?: string };
   logout: () => void;
@@ -29,7 +34,7 @@ interface AuthContextType {
   toggleAccountStatus: (id: string, reason?: string) => void;
   resetTemporaryPassword: (id: string, newPassword?: string) => string;
   updateEnterprise: (id: string, data: Partial<EnterpriseAccount>) => void;
-  deleteEnterprise: (id: string) => void;
+  deleteEnterprise: (id: string) => Promise<void>;
   impersonateEnterprise: (id: string) => void;
   stopImpersonation: () => void;
   
@@ -38,10 +43,21 @@ interface AuthContextType {
   generateRandomPassword: () => string;
 }
 
+export interface SuperAdminConfig {
+  id: string;
+  email: string;
+  password: string;
+  name: string;
+  role: 'super_admin';
+  status: 'active';
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_USERS_KEY = 'proformapulse_enterprises_v1';
 const STORAGE_CURRENT_USER_KEY = 'proformapulse_current_user_v1';
+const STORAGE_SUPER_ADMIN_KEY = 'proformapulse_super_admin_v1';
+const STORAGE_PURGED_FLAG = 'proformapulse_purged_demo_v1';
 
 const DEFAULT_ENTERPRISES: EnterpriseAccount[] = [
   {
@@ -105,10 +121,29 @@ export const SUPER_ADMIN_CREDENTIALS = {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [superAdminConfig, setSuperAdminConfig] = useState<SuperAdminConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_SUPER_ADMIN_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Error loading super admin config', e);
+    }
+    return {
+      id: SUPER_ADMIN_CREDENTIALS.id,
+      email: SUPER_ADMIN_CREDENTIALS.email,
+      password: SUPER_ADMIN_CREDENTIALS.password,
+      name: SUPER_ADMIN_CREDENTIALS.name,
+      role: 'super_admin',
+      status: 'active',
+    };
+  });
+
   const [enterprises, setEnterprises] = useState<EnterpriseAccount[]>(() => {
     try {
+      const isPurged = localStorage.getItem(STORAGE_PURGED_FLAG) === 'true';
       const saved = localStorage.getItem(STORAGE_USERS_KEY);
       if (saved) return JSON.parse(saved);
+      if (isPurged) return [];
     } catch (e) {
       console.error('Error loading enterprises', e);
     }
@@ -128,6 +163,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [impersonatingEnterpriseId, setImpersonatingEnterpriseId] = useState<string | null>(null);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify(superAdminConfig));
+  }, [superAdminConfig]);
+
+  const updateSuperAdminConfig = async (data: { email?: string; password?: string; name?: string }) => {
+    const updated: SuperAdminConfig = {
+      ...superAdminConfig,
+      email: data.email?.trim() || superAdminConfig.email,
+      password: data.password?.trim() || superAdminConfig.password,
+      name: data.name?.trim() || superAdminConfig.name,
+    };
+    setSuperAdminConfig(updated);
+    localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify(updated));
+
+    if (currentUser?.role === 'super_admin') {
+      setCurrentUser((prev) => prev ? {
+        ...prev,
+        email: updated.email,
+        name: updated.name,
+      } : null);
+    }
+
+    // Persist to Supabase so it works on Vercel and across all devices
+    if (isSupabaseConfigured) {
+      await SupabaseService.upsertSuperAdmin(updated);
+    }
+
+    return { success: true };
+  };
+
+  const clearAllDemoEnterprises = async () => {
+    setEnterprises([]);
+    localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify([]));
+    localStorage.setItem(STORAGE_PURGED_FLAG, 'true');
+    if (impersonatingEnterpriseId) {
+      setImpersonatingEnterpriseId(null);
+    }
+    if (isSupabaseConfigured) {
+      await SupabaseService.clearAllEnterprises();
+    }
+  };
+
   // Load from Supabase if configured
   useEffect(() => {
     if (!isSupabaseConfigured) return;
@@ -135,14 +212,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
     const initSupabase = async () => {
       try {
+        // 1. Load remote Super Admin credentials if configured in Supabase
+        const remoteAdmin = await SupabaseService.fetchSuperAdmin();
+        if (remoteAdmin && isMounted) {
+          setSuperAdminConfig((prev) => ({
+            ...prev,
+            name: remoteAdmin.name,
+            email: remoteAdmin.email,
+            password: remoteAdmin.password,
+          }));
+          localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify({
+            ...superAdminConfig,
+            name: remoteAdmin.name,
+            email: remoteAdmin.email,
+            password: remoteAdmin.password,
+          }));
+        }
+
+        // 2. Load remote enterprises
         const remoteEnterprises = await SupabaseService.fetchEnterprises();
-        if (remoteEnterprises && remoteEnterprises.length > 0 && isMounted) {
+        if (remoteEnterprises !== null && isMounted) {
           setEnterprises(remoteEnterprises);
-        } else if (remoteEnterprises && remoteEnterprises.length === 0) {
-          // First time initialization: seed default enterprises to Supabase
-          for (const ent of DEFAULT_ENTERPRISES) {
-            await SupabaseService.upsertEnterprise(ent);
-          }
         }
       } catch (err) {
         console.warn('Erreur initialisation Supabase Auth:', err);
@@ -159,8 +249,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'postgres_changes',
           { event: '*', schema: 'public', table: 'enterprises' },
           async () => {
+            const remoteAdmin = await SupabaseService.fetchSuperAdmin();
+            if (remoteAdmin && isMounted) {
+              setSuperAdminConfig((prev) => ({
+                ...prev,
+                name: remoteAdmin.name,
+                email: remoteAdmin.email,
+                password: remoteAdmin.password,
+              }));
+            }
             const updated = await SupabaseService.fetchEnterprises();
-            if (updated && isMounted) {
+            if (updated !== null && isMounted) {
               setEnterprises(updated);
             }
           }
@@ -236,12 +335,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Check Super Admin
-    if (cleanEmail === SUPER_ADMIN_CREDENTIALS.email.toLowerCase() && cleanPassword === SUPER_ADMIN_CREDENTIALS.password) {
+    // Check Super Admin (supports customized superAdminConfig and default credentials)
+    const matchesCustomAdmin = cleanEmail === superAdminConfig.email.toLowerCase() && cleanPassword === superAdminConfig.password;
+    const matchesDefaultAdmin = cleanEmail === SUPER_ADMIN_CREDENTIALS.email.toLowerCase() && cleanPassword === SUPER_ADMIN_CREDENTIALS.password;
+
+    if (matchesCustomAdmin || matchesDefaultAdmin) {
       const adminUser: AuthUser = {
-        id: SUPER_ADMIN_CREDENTIALS.id,
-        email: SUPER_ADMIN_CREDENTIALS.email,
-        name: SUPER_ADMIN_CREDENTIALS.name,
+        id: superAdminConfig.id,
+        email: superAdminConfig.email,
+        name: superAdminConfig.name,
         role: 'super_admin',
         status: 'active',
       };
@@ -395,13 +497,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
-  const deleteEnterprise = (id: string) => {
-    setEnterprises((prev) => prev.filter((e) => e.id !== id));
+  const deleteEnterprise = async (id: string) => {
+    setEnterprises((prev) => {
+      const filtered = prev.filter((e) => e.id !== id);
+      localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(filtered));
+      return filtered;
+    });
     if (impersonatingEnterpriseId === id) {
       setImpersonatingEnterpriseId(null);
     }
     if (isSupabaseConfigured) {
-      SupabaseService.deleteEnterprise(id);
+      await SupabaseService.deleteEnterprise(id);
     }
   };
 
@@ -422,11 +528,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         enterprises,
+        superAdminConfig,
         impersonatingEnterpriseId,
         activeEnterprise,
         isSupabaseConnected: isSupabaseConfigured,
         login,
         logout,
+        updateSuperAdminConfig,
+        clearAllDemoEnterprises,
         createEnterprise,
         toggleAccountStatus,
         resetTemporaryPassword,
