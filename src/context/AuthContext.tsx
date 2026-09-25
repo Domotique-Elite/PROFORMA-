@@ -115,7 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return DEFAULT_ENTERPRISES;
   });
 
-  // Current logged in user (defaults to Super Admin for seamless testing and instant access)
+  // Current logged in user (defaults to null so Login Page is shown first)
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
@@ -123,13 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.error('Error loading current user', e);
     }
-    return {
-      id: SUPER_ADMIN_CREDENTIALS.id,
-      email: SUPER_ADMIN_CREDENTIALS.email,
-      name: SUPER_ADMIN_CREDENTIALS.name,
-      role: 'super_admin',
-      status: 'active',
-    };
+    return null;
   });
 
   const [impersonatingEnterpriseId, setImpersonatingEnterpriseId] = useState<string | null>(null);

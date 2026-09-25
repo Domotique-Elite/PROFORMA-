@@ -260,23 +260,35 @@ export const Navbar: React.FC<{
               <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             </button>
 
-            {/* Auth Account / Switch Portal button */}
+            {/* User Account / Role Badge & Quick Switch */}
             <button
               onClick={onOpenAuthModal}
-              title="Connexion / Changer de compte"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 rounded-lg transition-colors shadow-xs"
+              title="Changer de compte ou vérifier les accès"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg transition-colors border border-slate-200"
             >
               {isSuperAdmin ? (
                 <>
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                  <span className="hidden sm:inline">Super Admin</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                  <span className="hidden sm:inline font-bold">Super Admin</span>
                 </>
               ) : (
                 <>
-                  <User className="w-3.5 h-3.5 text-slate-300" />
-                  <span className="hidden sm:inline">Connexion</span>
+                  <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                  <span className="hidden sm:inline truncate max-w-[120px] font-semibold">
+                    {currentUser?.name || 'Entreprise'}
+                  </span>
                 </>
               )}
+            </button>
+
+            {/* Logout / Déconnexion Button */}
+            <button
+              onClick={logout}
+              title="Se déconnecter et revenir à la page de connexion"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors shadow-xs active:scale-95"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-600" />
+              <span className="hidden sm:inline">Déconnexion</span>
             </button>
 
           </div>

@@ -10,6 +10,7 @@ import { ProformaFormModal } from './components/ProformaFormModal';
 import { ProformaViewModal } from './components/ProformaViewModal';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
 import { SettingsModal } from './components/SettingsModal';
+import { LoginPage } from './components/LoginPage';
 import { Proforma } from './types/proforma';
 import { Lock, AlertCircle, LogOut } from 'lucide-react';
 
@@ -33,9 +34,23 @@ function AppContent() {
     return currentUser?.role === 'super_admin';
   });
 
+  // Automatically update view when user logs in or switches
+  React.useEffect(() => {
+    if (currentUser?.role === 'super_admin') {
+      setIsSuperAdminView(true);
+    } else {
+      setIsSuperAdminView(false);
+    }
+  }, [currentUser?.role]);
+
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
   const [formProforma, setFormProforma] = useState<Proforma | null>(null);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
+
+  // If user is not authenticated, display the Login Page first!
+  if (!currentUser) {
+    return <LoginPage />;
+  }
 
   const handleOpenNewProforma = () => {
     setFormProforma(null);
@@ -98,13 +113,19 @@ function AppContent() {
             <p className="text-xs text-slate-500">
               Veuillez contacter le support ou l'administrateur de la plateforme pour rétablir votre accès.
             </p>
-            <div className="pt-2">
+            <div className="pt-2 flex items-center justify-center gap-2">
               <button
-                onClick={() => setAuthModalOpen(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition-all"
+                onClick={logout}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95"
               >
                 <LogOut className="w-4 h-4" />
-                <span>Changer de Compte / Connexion</span>
+                <span>Se déconnecter</span>
+              </button>
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition-all"
+              >
+                <span>Changer d'identifiant</span>
               </button>
             </div>
           </div>
