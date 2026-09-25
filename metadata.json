@@ -1,0 +1,6 @@
+{
+  "name": "ProformaPulse - Gestion & Suivi Financier des Proformas",
+  "description": "Application de création et gestion de factures proforma avec suivi des statuts en temps réel, calcul du chiffre d'affaires encaissé et engagé, et reporting financier.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
