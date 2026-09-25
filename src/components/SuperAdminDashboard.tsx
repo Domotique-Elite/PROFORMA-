@@ -45,6 +45,7 @@ export const SuperAdminDashboard: React.FC<{
     impersonateEnterprise,
     isAccountOnline,
     generateRandomPassword,
+    isTestAdminActive,
   } = useAuth();
 
   const { getEnterpriseMetrics } = useProforma();
@@ -223,11 +224,18 @@ export const SuperAdminDashboard: React.FC<{
           {/* Mon Compte Super Admin */}
           <button
             onClick={() => setIsSuperAdminSettingsOpen(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 transition-all active:scale-95 shadow-xs"
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all active:scale-95 shadow-xs ${
+              isTestAdminActive
+                ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700'
+            }`}
             title="Modifier l'email et le mot de passe de connexion Super Admin"
           >
-            <ShieldCheck className="w-4 h-4 text-indigo-400" />
-            <span>Mon Compte Admin</span>
+            <ShieldCheck className={`w-4 h-4 ${isTestAdminActive ? 'text-rose-400' : 'text-indigo-400'}`} />
+            <span>{isTestAdminActive ? 'Configurer mon compte' : 'Mon Compte Admin'}</span>
+            {isTestAdminActive && (
+              <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
+            )}
           </button>
 
           {/* Purger les comptes de test (si entreprises existantes) */}
@@ -253,30 +261,31 @@ export const SuperAdminDashboard: React.FC<{
         </div>
       </div>
 
-      {/* Personalized Super Admin Account Prompt (if using default credentials) */}
-      {superAdminConfig.email === 'admin@proformapulse.com' && (
-        <div className="bg-gradient-to-r from-indigo-900/90 via-slate-900 to-indigo-950 border border-indigo-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-white shadow-md">
+      {/* Personalized Super Admin Account Prompt (if using test credentials) */}
+      {isTestAdminActive && (
+        <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-indigo-950 border border-rose-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-white shadow-md">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-400 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-400/30 text-rose-400 flex items-center justify-center shrink-0">
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
               <div className="text-sm font-bold flex items-center gap-1.5">
-                <span>Personnalisez votre compte Super Administrateur</span>
-                <span className="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                  Important
+                <span>Remplacer et supprimer le compte Super Admin de test</span>
+                <span className="text-[10px] bg-rose-500/30 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                  Action recommandée
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Vous êtes connecté avec l'email générique <strong>({superAdminConfig.email})</strong>. Cliquez ici pour enregistrer votre propre email personnel et votre mot de passe confidentiel.
+                Vous êtes actuellement sur le compte de test temporaire (<span className="font-mono text-slate-200">admin@proformapulse.com</span>). Cliquez ici pour le supprimer définitivement et enregistrer votre propre email et mot de passe personnel.
               </p>
             </div>
           </div>
           <button
             onClick={() => setIsSuperAdminSettingsOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-md active:scale-95 whitespace-nowrap"
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-md active:scale-95 whitespace-nowrap flex items-center gap-1.5"
           >
-            Configurer mon compte personnel
+            <ShieldCheck className="w-4 h-4" />
+            <span>Supprimer le test & Activer mon compte</span>
           </button>
         </div>
       )}

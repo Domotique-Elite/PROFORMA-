@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth, SUPER_ADMIN_CREDENTIALS } from '../context/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { 
   ShieldCheck, 
   Building2, 
@@ -9,16 +9,18 @@ import {
   EyeOff, 
   ArrowRight, 
   AlertCircle, 
-  CheckCircle2, 
   Database, 
   Sparkles,
-  Zap,
   DollarSign,
-  FileText
+  FileText,
+  User,
+  KeyRound,
+  X,
+  CheckCircle2
 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { login, enterprises, superAdminConfig, isSupabaseConnected } = useAuth();
+  const { login, isSupabaseConnected, isTestAdminActive, setupInitialSuperAdmin } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'enterprise' | 'superadmin'>('enterprise');
   const [email, setEmail] = useState('');
@@ -26,6 +28,15 @@ export const LoginPage: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Initial Super Admin Setup Modal state
+  const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
+  const [setupName, setSetupName] = useState('');
+  const [setupEmail, setSetupEmail] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupShowPassword, setSetupShowPassword] = useState(false);
+  const [setupError, setSetupError] = useState('');
+  const [isSettingUp, setIsSettingUp] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,28 +53,46 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
 
-    // Simulate snappy network feedback
     setTimeout(() => {
       const res = login(email, password);
       setIsLoading(false);
       if (!res.success) {
-        setErrorMessage(res.error || 'Identifiants invalides. Veuillez réessayer.');
+        setErrorMessage(res.error || 'Identifiants invalides. Veuillez vérifier votre email et mot de passe.');
       }
     }, 250);
   };
 
-  const handleSelectQuickAccount = (entEmail: string, entPass: string) => {
-    setActiveTab('enterprise');
-    setEmail(entEmail);
-    setPassword(entPass);
-    setErrorMessage('');
-  };
+  const handleCreateSuperAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSetupError('');
 
-  const handleSelectSuperAdmin = () => {
-    setActiveTab('superadmin');
-    setEmail(superAdminConfig.email);
-    setPassword(superAdminConfig.password);
-    setErrorMessage('');
+    if (!setupEmail.trim()) {
+      setSetupError('Veuillez saisir votre adresse email.');
+      return;
+    }
+    if (!setupPassword.trim() || setupPassword.length < 6) {
+      setSetupError('Le mot de passe doit comporter au moins 6 caractères.');
+      return;
+    }
+
+    setIsSettingUp(true);
+    try {
+      const res = await setupInitialSuperAdmin({
+        name: setupName.trim() || 'Super Administrateur',
+        email: setupEmail.trim().toLowerCase(),
+        password: setupPassword.trim(),
+      });
+
+      setIsSettingUp(false);
+      if (res.success) {
+        setIsSetupModalOpen(false);
+      } else {
+        setSetupError(res.error || 'Erreur lors de la configuration du compte.');
+      }
+    } catch (err) {
+      setIsSettingUp(false);
+      setSetupError('Une erreur est survenue lors de la synchronisation.');
+    }
   };
 
   return (
@@ -94,7 +123,7 @@ export const LoginPage: React.FC = () => {
           }`}>
             <Database className="w-3.5 h-3.5" />
             <span className="hidden md:inline">
-              {isSupabaseConnected ? 'Supabase PostgreSQL Connecté' : 'Mode Local / Démo'}
+              {isSupabaseConnected ? 'PostgreSQL Supabase' : 'Mode Local'}
             </span>
             <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
           </div>
@@ -104,7 +133,7 @@ export const LoginPage: React.FC = () => {
       {/* Main Login Area */}
       <main className="max-w-5xl w-full mx-auto my-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-center py-6 sm:py-10">
         
-        {/* Left Column: Platform Presentation & Features */}
+        {/* Left Column: Platform Presentation */}
         <div className="lg:col-span-6 space-y-6">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
@@ -116,7 +145,7 @@ export const LoginPage: React.FC = () => {
           </h1>
 
           <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-            Identifiez-vous pour gérer vos devis proforma, suivre le pipeline financier, enregistrer les acomptes clients et exporter vos documents officiels.
+            Identifiez-vous pour gérer vos devis proforma, suivre vos paiements d'acomptes, personnaliser vos documents légaux et superviser votre activité.
           </p>
 
           {/* Highlights */}
@@ -127,7 +156,7 @@ export const LoginPage: React.FC = () => {
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white">Devis & Proformas</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Modèles personnalisés, TVA, acomptes et validité légale.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Modèles personnalisés, TVA et conversion facture.</p>
               </div>
             </div>
 
@@ -137,7 +166,7 @@ export const LoginPage: React.FC = () => {
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white">Suivi Financier</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Enregistrement des encaissements partiels et conversion en facture.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Enregistrement des encaissements et soldes dus.</p>
               </div>
             </div>
 
@@ -146,8 +175,8 @@ export const LoginPage: React.FC = () => {
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-white">Espace Multi-Entreprises</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Chaque entreprise dispose de son profil et de sa numérotation.</p>
+                <h4 className="text-xs font-bold text-white">Espace Entreprise</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Données et devis isolés par entreprise cliente.</p>
               </div>
             </div>
 
@@ -157,7 +186,7 @@ export const LoginPage: React.FC = () => {
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white">Portail Super Admin</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">Supervision globale, gestion des accès et réinitialisation.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Supervision globale et création des comptes.</p>
               </div>
             </div>
           </div>
@@ -173,7 +202,7 @@ export const LoginPage: React.FC = () => {
                 Connexion
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Choisissez votre type de compte pour vous identifier
+                Sélectionnez votre type d'accès pour vous identifier
               </p>
 
               {/* Account Type Tabs */}
@@ -200,8 +229,8 @@ export const LoginPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setActiveTab('superadmin');
-                    setEmail(SUPER_ADMIN_CREDENTIALS.email);
-                    setPassword(SUPER_ADMIN_CREDENTIALS.password);
+                    setEmail('');
+                    setPassword('');
                     setErrorMessage('');
                   }}
                   className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -218,10 +247,10 @@ export const LoginPage: React.FC = () => {
 
             {/* Error banner */}
             {errorMessage && (
-              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2 animate-shake">
+              <div className="mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
-                  <span className="font-bold">Échec de connexion : </span>
+                  <span className="font-bold">Erreur : </span>
                   {errorMessage}
                 </div>
               </div>
@@ -231,7 +260,7 @@ export const LoginPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Adresse Email Professionnelle
+                  {activeTab === 'enterprise' ? 'Email Entreprise' : 'Email Super Administrateur'}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -240,7 +269,8 @@ export const LoginPage: React.FC = () => {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={activeTab === 'enterprise' ? 'ex: contact@monentreprise.com' : superAdminConfig.email}
+                    placeholder={activeTab === 'enterprise' ? 'contact@entreprise.com' : 'admin@domaine.com'}
+                    autoComplete="email"
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all font-medium"
                   />
                 </div>
@@ -251,11 +281,6 @@ export const LoginPage: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Mot de passe
                   </label>
-                  {activeTab === 'enterprise' && (
-                    <span className="text-[11px] text-slate-400">
-                      Fourni par le Super Admin
-                    </span>
-                  )}
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -265,6 +290,7 @@ export const LoginPage: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
+                    autoComplete="current-password"
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all font-medium"
                   />
                   <button
@@ -294,72 +320,31 @@ export const LoginPage: React.FC = () => {
               </button>
             </form>
 
-            {/* Quick Demo Access Bar */}
-            <div className="mt-6 pt-5 border-t border-slate-200">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Comptes de test (Connexion en 1 clic)</span>
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                {/* Super Admin Quick Button */}
-                <button
-                  type="button"
-                  onClick={handleSelectSuperAdmin}
-                  className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between text-xs ${
-                    activeTab === 'superadmin'
-                      ? 'bg-indigo-50/80 border-indigo-300 text-indigo-900 font-semibold'
-                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                    <div>
-                      <div className="font-bold">{superAdminConfig.name}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{superAdminConfig.email}</div>
-                    </div>
+            {/* Direct Super Admin Personal Setup link (only visible if test admin is still active and in superadmin tab) */}
+            {activeTab === 'superadmin' && isTestAdminActive && (
+              <div className="mt-6 pt-5 border-t border-slate-100">
+                <div className="p-3.5 bg-indigo-50/70 border border-indigo-200 rounded-2xl text-center space-y-2">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-indigo-900">
+                    <KeyRound className="w-4 h-4 text-indigo-600" />
+                    <span>Créer mon propre compte Super Admin</span>
                   </div>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold font-mono">
-                    {superAdminConfig.password}
-                  </span>
-                </button>
-
-                {/* Enterprises Quick Buttons or Empty Message */}
-                {enterprises.length === 0 ? (
-                  <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center">
-                    <p className="text-[11px] text-slate-500">
-                      Aucune entreprise configurée. Connectez-vous en Super Admin pour créer vos premières entreprises.
-                    </p>
-                  </div>
-                ) : (
-                  enterprises.slice(0, 2).map((ent) => (
-                    <button
-                      key={ent.id}
-                      type="button"
-                      onClick={() => handleSelectQuickAccount(ent.email, ent.tempPassword)}
-                      className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between text-xs ${
-                        activeTab === 'enterprise' && email === ent.email
-                          ? 'bg-indigo-50/80 border-indigo-300 text-indigo-900 font-semibold'
-                          : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <Building2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <div className="truncate">
-                          <div className="font-bold truncate">{ent.companyName}</div>
-                          <div className="text-[10px] text-slate-500 font-mono truncate">{ent.email}</div>
-                        </div>
-                      </div>
-                      <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono shrink-0 ml-2">
-                        {ent.tempPassword}
-                      </span>
-                    </button>
-                  ))
-                )}
+                  <p className="text-[11px] text-indigo-700 leading-relaxed">
+                    Vous êtes le propriétaire ? Vous pouvez supprimer le compte test et enregistrer immédiatement vos identifiants personnels :
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSetupError('');
+                      setIsSetupModalOpen(true);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Configurer mon Super Admin & Supprimer le test</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         </div>
@@ -368,15 +353,153 @@ export const LoginPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="max-w-6xl w-full mx-auto py-4 text-center text-xs text-slate-400 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2">
-        <span>© 2026 ProformaPulse · Plateforme de Facturation Proforma & Encaissements</span>
+        <span>© 2026 ProformaPulse · Plateforme Sécurisée Multi-Entreprises</span>
         <div className="flex items-center gap-4 text-slate-400">
-          <span>Multi-Entreprises</span>
+          <span>Gestion des Devis</span>
+          <span>•</span>
+          <span>Encaissements</span>
           <span>•</span>
           <span>Supervision Globale</span>
-          <span>•</span>
-          <span>PostgreSQL Supabase</span>
         </div>
       </footer>
+
+      {/* Initial Super Admin Setup Modal */}
+      {isSetupModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fade-in">
+          <div className="bg-white text-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-900 to-indigo-950 text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Créer mon Compte Super Admin</h3>
+                  <p className="text-[11px] text-slate-300">Suppression définitive du compte de test</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSetupModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateSuperAdmin} className="p-6 space-y-4">
+              
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-bold">Suppression du compte test :</span> En définissant vos coordonnées ci-dessous, le compte de test temporaire sera définitivement supprimé. Vous serez l'unique Super Administrateur de la plateforme.
+                </div>
+              </div>
+
+              {setupError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{setupError}</span>
+                </div>
+              )}
+
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Votre Nom ou Titre
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    required
+                    value={setupName}
+                    onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="ex: Wilky Valcin"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Votre Adresse Email Personnelle
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="email"
+                    required
+                    value={setupEmail}
+                    onChange={(e) => setSetupEmail(e.target.value)}
+                    placeholder="votre-email@exemple.com"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Votre Mot de Passe Sécurisé
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type={setupShowPassword ? 'text' : 'password'}
+                    required
+                    value={setupPassword}
+                    onChange={(e) => setSetupPassword(e.target.value)}
+                    placeholder="Minimum 6 caractères"
+                    className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSetupShowPassword(!setupShowPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    title={setupShowPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                  >
+                    {setupShowPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSetupModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSettingUp}
+                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+                >
+                  {isSettingUp ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Configuration...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Activer mon Super Admin & Supprimer le test</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

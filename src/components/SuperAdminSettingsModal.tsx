@@ -17,11 +17,11 @@ export const SuperAdminSettingsModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
 }> = ({ isOpen, onClose }) => {
-  const { superAdminConfig, updateSuperAdminConfig } = useAuth();
+  const { superAdminConfig, updateSuperAdminConfig, isTestAdminActive } = useAuth();
 
-  const [name, setName] = useState(superAdminConfig.name);
-  const [email, setEmail] = useState(superAdminConfig.email);
-  const [password, setPassword] = useState(superAdminConfig.password);
+  const [name, setName] = useState(isTestAdminActive ? '' : superAdminConfig.name);
+  const [email, setEmail] = useState(isTestAdminActive ? '' : superAdminConfig.email);
+  const [password, setPassword] = useState(isTestAdminActive ? '' : superAdminConfig.password);
   const [showPassword, setShowPassword] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -53,7 +53,7 @@ export const SuperAdminSettingsModal: React.FC<{
 
       setIsLoading(false);
       if (res.success) {
-        setSuccessMessage('Vos identifiants Super Admin ont été enregistrés et synchronisés dans la base de données avec succès !');
+        setSuccessMessage('Compte de test supprimé ! Vos nouveaux identifiants Super Admin sont maintenant actifs et sauvegardés.');
         setTimeout(() => {
           setSuccessMessage('');
           onClose();
@@ -78,8 +78,12 @@ export const SuperAdminSettingsModal: React.FC<{
               <ShieldCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold">Mon Compte Super Admin</h3>
-              <p className="text-[11px] text-slate-300">Modifiez vos identifiants de connexion principaux</p>
+              <h3 className="text-sm font-bold">
+                {isTestAdminActive ? 'Remplacer et Supprimer le Compte Test' : 'Mon Compte Super Admin'}
+              </h3>
+              <p className="text-[11px] text-slate-300">
+                {isTestAdminActive ? 'Créez vos identifiants réels et supprimez le compte démo' : 'Modifiez vos identifiants de connexion principaux'}
+              </p>
             </div>
           </div>
           <button
@@ -93,6 +97,15 @@ export const SuperAdminSettingsModal: React.FC<{
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           
+          {isTestAdminActive && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                <span className="font-bold">Suppression définitive du compte test :</span> Dès que vous enregistrez ce formulaire, l'adresse de test <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-[11px]">admin@proformapulse.com</code> sera définitivement désactivée et supprimée. Seuls vos identifiants ci-dessous seront acceptés.
+              </div>
+            </div>
+          )}
+
           {successMessage && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -195,7 +208,11 @@ export const SuperAdminSettingsModal: React.FC<{
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              className={`px-4 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all flex items-center gap-1.5 disabled:opacity-60 ${
+                isTestAdminActive 
+                  ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/30' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/30'
+              }`}
             >
               {isLoading ? (
                 <>
@@ -205,7 +222,11 @@ export const SuperAdminSettingsModal: React.FC<{
               ) : (
                 <>
                   <Check className="w-3.5 h-3.5" />
-                  <span>Enregistrer mes identifiants</span>
+                  <span>
+                    {isTestAdminActive 
+                      ? 'Supprimer le compte test & Activer mon compte' 
+                      : 'Enregistrer mes identifiants'}
+                  </span>
                 </>
               )}
             </button>

@@ -12,7 +12,9 @@ interface AuthContextType {
   // Super Admin Credentials & Config
   superAdminConfig: SuperAdminConfig;
   updateSuperAdminConfig: (data: { email?: string; password?: string; name?: string }) => Promise<{ success: boolean; error?: string }>;
+  setupInitialSuperAdmin: (data: { name: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
   clearAllDemoEnterprises: () => Promise<void>;
+  isTestAdminActive: boolean;
 
   // Auth methods
   login: (email: string, password: string) => { success: boolean; error?: string };
@@ -50,6 +52,7 @@ export interface SuperAdminConfig {
   name: string;
   role: 'super_admin';
   status: 'active';
+  isCustomized?: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -124,7 +127,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [superAdminConfig, setSuperAdminConfig] = useState<SuperAdminConfig>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_SUPER_ADMIN_KEY);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const isCustom = parsed.isCustomized || (parsed.email && parsed.email.toLowerCase() !== SUPER_ADMIN_CREDENTIALS.email.toLowerCase());
+        return {
+          ...parsed,
+          isCustomized: isCustom,
+        };
+      }
     } catch (e) {
       console.error('Error loading super admin config', e);
     }
@@ -135,8 +145,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       name: SUPER_ADMIN_CREDENTIALS.name,
       role: 'super_admin',
       status: 'active',
+      isCustomized: false,
     };
   });
+
+  const isTestAdminActive = !(
+    superAdminConfig.isCustomized ||
+    superAdminConfig.email.toLowerCase() !== SUPER_ADMIN_CREDENTIALS.email.toLowerCase()
+  );
 
   const [enterprises, setEnterprises] = useState<EnterpriseAccount[]>(() => {
     try {
@@ -170,9 +186,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateSuperAdminConfig = async (data: { email?: string; password?: string; name?: string }) => {
     const updated: SuperAdminConfig = {
       ...superAdminConfig,
-      email: data.email?.trim() || superAdminConfig.email,
+      id: 'super-admin-master',
+      email: data.email?.trim().toLowerCase() || superAdminConfig.email,
       password: data.password?.trim() || superAdminConfig.password,
       name: data.name?.trim() || superAdminConfig.name,
+      isCustomized: true,
     };
     setSuperAdminConfig(updated);
     localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify(updated));
@@ -186,6 +204,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Persist to Supabase so it works on Vercel and across all devices
+    if (isSupabaseConfigured) {
+      await SupabaseService.upsertSuperAdmin(updated);
+    }
+
+    return { success: true };
+  };
+
+  const setupInitialSuperAdmin = async (data: { name: string; email: string; password: string }) => {
+    const cleanEmail = data.email.trim().toLowerCase();
+    const cleanPassword = data.password.trim();
+    const cleanName = data.name.trim() || 'Super Administrateur';
+
+    if (!cleanEmail || !cleanPassword) {
+      return { success: false, error: 'Email et mot de passe requis.' };
+    }
+
+    const updated: SuperAdminConfig = {
+      id: 'super-admin-master',
+      name: cleanName,
+      email: cleanEmail,
+      password: cleanPassword,
+      role: 'super_admin',
+      status: 'active',
+      isCustomized: true,
+    };
+
+    setSuperAdminConfig(updated);
+    localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify(updated));
+
+    const adminUser: AuthUser = {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      role: 'super_admin',
+      status: 'active',
+    };
+    setCurrentUser(adminUser);
+    setImpersonatingEnterpriseId(null);
+
     if (isSupabaseConfigured) {
       await SupabaseService.upsertSuperAdmin(updated);
     }
@@ -215,18 +272,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 1. Load remote Super Admin credentials if configured in Supabase
         const remoteAdmin = await SupabaseService.fetchSuperAdmin();
         if (remoteAdmin && isMounted) {
-          setSuperAdminConfig((prev) => ({
-            ...prev,
+          const isCustom = remoteAdmin.email.toLowerCase() !== SUPER_ADMIN_CREDENTIALS.email.toLowerCase();
+          const loadedAdmin: SuperAdminConfig = {
+            id: 'super-admin-master',
             name: remoteAdmin.name,
             email: remoteAdmin.email,
             password: remoteAdmin.password,
-          }));
-          localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify({
-            ...superAdminConfig,
-            name: remoteAdmin.name,
-            email: remoteAdmin.email,
-            password: remoteAdmin.password,
-          }));
+            role: 'super_admin',
+            status: 'active',
+            isCustomized: isCustom,
+          };
+          setSuperAdminConfig(loadedAdmin);
+          localStorage.setItem(STORAGE_SUPER_ADMIN_KEY, JSON.stringify(loadedAdmin));
         }
 
         // 2. Load remote enterprises
@@ -335,11 +392,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Check Super Admin (supports customized superAdminConfig and default credentials)
-    const matchesCustomAdmin = cleanEmail === superAdminConfig.email.toLowerCase() && cleanPassword === superAdminConfig.password;
-    const matchesDefaultAdmin = cleanEmail === SUPER_ADMIN_CREDENTIALS.email.toLowerCase() && cleanPassword === SUPER_ADMIN_CREDENTIALS.password;
+    const isCustomized = Boolean(
+      superAdminConfig.isCustomized ||
+      superAdminConfig.email.toLowerCase() !== SUPER_ADMIN_CREDENTIALS.email.toLowerCase()
+    );
 
-    if (matchesCustomAdmin || matchesDefaultAdmin) {
+    const isUsingDefaultTestCreds =
+      cleanEmail === SUPER_ADMIN_CREDENTIALS.email.toLowerCase() &&
+      cleanPassword === SUPER_ADMIN_CREDENTIALS.password;
+
+    // If the super admin was customized, the test account (admin@proformapulse.com) is permanently removed!
+    if (isUsingDefaultTestCreds && isCustomized) {
+      return {
+        success: false,
+        error: 'Le compte Super Admin de test (admin@proformapulse.com) a été définitivement supprimé. Veuillez vous connecter avec votre adresse email Super Admin configurée.',
+      };
+    }
+
+    const matchesCustomAdmin =
+      cleanEmail === superAdminConfig.email.toLowerCase() &&
+      cleanPassword === superAdminConfig.password;
+
+    if (matchesCustomAdmin || (!isCustomized && isUsingDefaultTestCreds)) {
       const adminUser: AuthUser = {
         id: superAdminConfig.id,
         email: superAdminConfig.email,
@@ -532,9 +606,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         impersonatingEnterpriseId,
         activeEnterprise,
         isSupabaseConnected: isSupabaseConfigured,
+        isTestAdminActive,
         login,
         logout,
         updateSuperAdminConfig,
+        setupInitialSuperAdmin,
         clearAllDemoEnterprises,
         createEnterprise,
         toggleAccountStatus,
